@@ -10,7 +10,9 @@ func main() {
 
 	fileServer := http.FileServer(http.Dir("."))
 	mux := http.NewServeMux()	
-	mux.Handle("/", fileServer)
+
+	mux.HandleFunc("/healthz", handleHealth)
+	mux.Handle("/app", http.StripPrefix("/app", fileServer))
 
 	server := &http.Server{
 		Addr:		":" + port,
@@ -19,4 +21,10 @@ func main() {
 
 	log.Printf("Serving files from project root on port: %s\n", port)
 	log.Fatal(server.ListenAndServe())
+}
+
+func handleHealth (w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
