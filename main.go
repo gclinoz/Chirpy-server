@@ -16,9 +16,9 @@ func main() {
 
 	mux := http.NewServeMux()	
 	mux.Handle("/app/", http.StripPrefix("/app", fileServerInc))
-	mux.HandleFunc("GET /healthz", handleHealth)
-	mux.HandleFunc("GET /metrics", api.handleCountReq)
-	mux.HandleFunc("POST /reset", api.handleReset)
+	mux.HandleFunc("GET /api/healthz", handleHealth)
+	mux.HandleFunc("GET /api/metrics", api.handleCountReq)
+	mux.HandleFunc("POST /api/reset", api.handleReset)
 
 	server := &http.Server{
 		Addr:		":" + port,
