@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync/atomic"
 	"encoding/json"
+	"strings"
 )
 
 func handleHealth (w http.ResponseWriter, req *http.Request) {
@@ -60,10 +61,10 @@ func handleValid (w http.ResponseWriter, r *http.Request) {
 	}
 
 	type validResponse struct {
-		Valid bool `json:"valid"`
+		Cleaned_body string `json:"cleaned_body"`
 	}
 	success := validResponse{
-		Valid: true,
+		Cleaned_body: replaceBad(params.Body),
 	}
 	respondWithJSON(w, 200, success)
 }
@@ -100,4 +101,21 @@ func respondWithJSON (w http.ResponseWriter, code int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	w.Write(dat)
+}
+
+func replaceBad (words string) string {
+	splited := strings.Split(words, " ")
+	replaced := []string{}
+
+	for _, val := range splited {
+		if strings.ToLower(val) == "kerfuffle" ||
+		strings.ToLower(val) == "sharbert" ||
+		strings.ToLower(val) == "fornax" {
+			replaced = append(replaced, "****")
+			continue
+		}
+		replaced = append(replaced, val)
+	}
+
+	return strings.Join(replaced, " ")
 }
