@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"sync/atomic"
 	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -95,33 +94,70 @@ func (cfg *apiConfig) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, 201, resp)
 }
 
-func handleValid(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handleCreateChirp(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Body string `json:"body"`
+		Body	string		`json:"body"`
+		User_id	uuid.UUID	`json:"user_id"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		log.Printf("Error decoding parameters: %s", err)
-		w.WriteHeader(500)
+		respondWithError(w, 500, "Invalid chirp")
 		return
 	}
 
-	if len(params.Body) > 140 {
-		respondWithError(w, 400, "Chirp is too long")
-		return
+	paramChirp := database.CreateChirpParams{
+		Body:	params.Body,
+		UserID:	params.User_id,
+	}
+	data, err := cfg.db.CreateChirp(r.Context(), paramChirp)
+	if err != nil {
+		respondWithError(w, 500, "Error when creating chirps")
 	}
 
-	type validResponse struct {
-		Cleaned_body string `json:"cleaned_body"`
+	type Chirpm struct {
+		ID        uuid.UUID	`json:"id"`
+		CreatedAt time.Time	`json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Body      string	`json:"body"`
+		UserID    uuid.UUID	`json:"user_id"`
 	}
-	success := validResponse{
-		Cleaned_body: replaceBad(params.Body),
+	resp := Chirpm{
+		ID:			data.ID,
+		CreatedAt:	data.CreatedAt,
+		UpdatedAt:	data.UpdatedAt,
+		Body:		data.Body,
+		UserID:		data.UserID,
 	}
-	respondWithJSON(w, 200, success)
+	respondWithJSON(w, 201, resp)
 }
+
+// func handleValid(w http.ResponseWriter, r *http.Request) {
+// 	type parameters struct {
+// 		Body string `json:"body"`
+// 	}
+// 	decoder := json.NewDecoder(r.Body)
+// 	params := parameters{}
+// 	err := decoder.Decode(&params)
+// 	if err != nil {
+// 		log.Printf("Error decoding parameters: %s", err)
+// 		w.WriteHeader(500)
+// 		return
+// 	}
+// 	if len(params.Body) > 140 {
+// 		respondWithError(w, 400, "Chirp is too long")
+// 		return
+// 	}
+// 	type validResponse struct {
+// 		Cleaned_body string `json:"cleaned_body"`
+// 	}
+// 	success := validResponse{
+// 		Cleaned_body: replaceBad(params.Body),
+// 	}
+// 	respondWithJSON(w, 200, success)
+// }
 
 func respondWithError(w http.ResponseWriter, code int, msg string) {
 	type returnVals struct {
@@ -157,19 +193,17 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Write(dat)
 }
 
-func replaceBad(words string) string {
-	splited := strings.Split(words, " ")
-	replaced := []string{}
-
-	for _, val := range splited {
-		if strings.ToLower(val) == "kerfuffle" ||
-		strings.ToLower(val) == "sharbert" ||
-		strings.ToLower(val) == "fornax" {
-			replaced = append(replaced, "****")
-			continue
-		}
-		replaced = append(replaced, val)
-	}
-
-	return strings.Join(replaced, " ")
-}
+// func replaceBad(words string) string {
+// 	splited := strings.Split(words, " ")
+// 	replaced := []string{}
+// 	for _, val := range splited {
+// 		if strings.ToLower(val) == "kerfuffle" ||
+// 		strings.ToLower(val) == "sharbert" ||
+// 		strings.ToLower(val) == "fornax" {
+// 			replaced = append(replaced, "****")
+// 			continue
+// 		}
+// 		replaced = append(replaced, val)
+// 	}
+// 	return strings.Join(replaced, " ")
+// }
