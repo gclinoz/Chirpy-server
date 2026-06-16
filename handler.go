@@ -58,6 +58,7 @@ func handleValid (w http.ResponseWriter, r *http.Request) {
 
 	if len(params.Body) > 140 {
 		respondWithError(w, 400, "Chirp is too long")
+		return
 	}
 
 	type validResponse struct {
