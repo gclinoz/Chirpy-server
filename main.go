@@ -21,7 +21,10 @@ func main() {
 	if err != nil {
 		log.Printf("Error connecting to database: %s", err)
 	}
-	api := &apiConfig{db: database.New(db)}
+	api := &apiConfig{
+		db:			database.New(db),
+		platform:	os.Getenv("PLATFORM"),
+	}
 
 	fileServer := http.FileServer(http.Dir("."))
 	fileServerInc := api.middlewareMetricsInc(fileServer)
@@ -32,6 +35,7 @@ func main() {
 	mux.HandleFunc("POST /admin/reset", api.handleReset)
 	mux.HandleFunc("GET /admin/metrics", api.handleCountReq)
 	mux.HandleFunc("POST /api/validate_chirp", handleValid)
+	mux.HandleFunc("POST /api/users", api.handleCreateUser)
 
 	server := &http.Server{
 		Addr:		":" + port,

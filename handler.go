@@ -7,11 +7,13 @@ import (
 	"sync/atomic"
 	"encoding/json"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/gclinoz/Chirpy-server/internal/database"
 )
 
-func handleHealth (w http.ResponseWriter, req *http.Request) {
+func handleHealth(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
@@ -20,6 +22,7 @@ func handleHealth (w http.ResponseWriter, req *http.Request) {
 type apiConfig struct {
 	fileserverHits	atomic.Int32
 	db				*database.Queries
+	platform		string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -41,11 +44,58 @@ func (cfg *apiConfig) handleCountReq(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handleReset(w http.ResponseWriter, r *http.Request) {
+	if cfg.platform != "dev" {
+		respondWithError(w, 403, "You are not authorized to do this")
+		return
+	}
+
 	cfg.fileserverHits.Store(0)
-	fmt.Fprintf(w, "Hits reset to 0")
+	err := cfg.db.DeleteAllUser(r.Context())
+	if err != nil {
+		log.Printf("Error deleting users: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	fmt.Fprintf(w, "Hits reset to 0 and Delete all users")
 }
 
-func handleValid (w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handleCreateUser(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Email string `json:"email"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		log.Printf("Error decoding parameters: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	data, err := cfg.db.CreateUser(r.Context(), params.Email)
+	if err != nil {
+		log.Printf("Error when creating new user: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	type Userm struct {
+		ID			uuid.UUID	`json:"id"`
+		CreatedAt	time.Time	`json:"created_at"`
+		UpdatedAt	time.Time	`json:"updated_at"`
+		Email		string		`json:"email"`
+	}
+	resp := Userm{
+		ID:			data.ID,
+		CreatedAt:	data.CreatedAt,
+		UpdatedAt:	data.UpdatedAt,
+		Email:		data.Email,
+	}
+	respondWithJSON(w, 201, resp)
+}
+
+func handleValid(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Body string `json:"body"`
 	}
@@ -73,7 +123,7 @@ func handleValid (w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, 200, success)
 }
 
-func respondWithError (w http.ResponseWriter, code int, msg string) {
+func respondWithError(w http.ResponseWriter, code int, msg string) {
 	type returnVals struct {
 		Error string `json:"error"`
 	}
@@ -94,7 +144,7 @@ func respondWithError (w http.ResponseWriter, code int, msg string) {
 	w.Write(dat)
 }
 
-func respondWithJSON (w http.ResponseWriter, code int, payload interface{}) {
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	dat, err := json.Marshal(payload)
 	if err != nil {
 		log.Printf("Error marshalling JSON: %s", err)
@@ -107,7 +157,7 @@ func respondWithJSON (w http.ResponseWriter, code int, payload interface{}) {
 	w.Write(dat)
 }
 
-func replaceBad (words string) string {
+func replaceBad(words string) string {
 	splited := strings.Split(words, " ")
 	replaced := []string{}
 
