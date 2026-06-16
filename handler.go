@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"encoding/json"
 	"strings"
+
+	"github.com/gclinoz/Chirpy-server/internal/database"
 )
 
 func handleHealth (w http.ResponseWriter, req *http.Request) {
@@ -17,6 +19,7 @@ func handleHealth (w http.ResponseWriter, req *http.Request) {
 
 type apiConfig struct {
 	fileserverHits	atomic.Int32
+	db				*database.Queries
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {

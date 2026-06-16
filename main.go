@@ -3,12 +3,26 @@ package main
 import (
 	"net/http"
 	"log"
+	"os"
+	"database/sql"
+
+	"github.com/gclinoz/Chirpy-server/internal/database"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 func main() {
 	const port = "8080"
 
-	api := &apiConfig{}
+	godotenv.Load()
+	dbURL := os.Getenv("DB_URL")
+
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Printf("Error connecting to database: %s", err)
+	}
+	api := &apiConfig{db: database.New(db)}
+
 	fileServer := http.FileServer(http.Dir("."))
 	fileServerInc := api.middlewareMetricsInc(fileServer)
 
