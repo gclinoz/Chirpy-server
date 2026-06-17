@@ -136,7 +136,7 @@ func (cfg *apiConfig) handleCreateChirp(w http.ResponseWriter, r *http.Request) 
 	respondWithJSON(w, 201, resp)
 }
 
-func (cfg *apiConfig) handleGetChirp(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handleGetAllChirp(w http.ResponseWriter, r *http.Request) {
 	data, err := cfg.db.GetAllChirp(r.Context())
 	if err != nil {
 		respondWithError(w, 500, "Error when getting chirps")
@@ -155,6 +155,28 @@ func (cfg *apiConfig) handleGetChirp(w http.ResponseWriter, r *http.Request) {
 	}
 	respondWithJSON(w, 200, resp)
 }
+
+func (cfg *apiConfig) handleGetChirp(w http.ResponseWriter, r *http.Request) {
+	parsed, err := uuid.Parse(r.PathValue("chirpID"))
+	if err != nil {
+		respondWithError(w, 500, "Invalid chirpID")
+	}
+
+	data, err := cfg.db.GetChirp(r.Context(), parsed)
+	if err != nil {
+		respondWithError(w, 404, "Error when getting the chirp")
+	}
+
+	resp := Chirp{
+		ID:			data.ID,
+		CreatedAt:	data.CreatedAt,
+		UpdatedAt:	data.UpdatedAt,
+		Body:		data.Body,
+		UserID:		data.UserID,
+	}
+	respondWithJSON(w, 200, resp)
+}
+
 // func handleValid(w http.ResponseWriter, r *http.Request) {
 // 	type parameters struct {
 // 		Body string `json:"body"`
