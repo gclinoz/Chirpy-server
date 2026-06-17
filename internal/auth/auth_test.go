@@ -1,6 +1,11 @@
 package auth
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+)
 
 func TestHashPassword(t *testing.T) {
 	pswd := "onceUponAtime"
@@ -24,5 +29,54 @@ func TestHashPassword(t *testing.T) {
 	}
 	if match == true {
 		t.Errorf("Hashed string match on wrong password")
+	}
+}
+
+func TestJWTValid (t *testing.T) {
+	uid := uuid.New()
+	secret := "onceUponAtime"
+
+	s, err := MakeJWT(uid, secret, time.Hour)
+	if err != nil {
+		t.Fatalf("Error making JWT: %s", err)
+	}
+
+	validID, err := ValidateJWT(s, secret)
+	if err != nil {
+		t.Fatalf("JWT validation fail: %s", err)
+	}
+
+	if uid != validID {
+		t.Errorf("ID mismatch")
+	}
+}
+
+func TestJWTExpired(t *testing.T) {
+	uid := uuid.New()
+	secret := "onceUponAtime"
+
+	s, err := MakeJWT(uid, secret, -time.Second)
+	if err != nil {
+		t.Fatalf("Error making JWT: %s", err)
+	}
+
+	_, err = ValidateJWT(s, secret)
+	if err == nil {
+		t.Fatalf("expected an error for expired token, got nil")
+	}
+}
+
+func TestJWTWrong (t *testing.T) {
+	uid := uuid.New()
+	secret := "onceUponAtime"
+
+	s, err := MakeJWT(uid, secret, time.Hour)
+	if err != nil {
+		t.Fatalf("Error making JWT: %s", err)
+	}
+
+	_, err = ValidateJWT(s, "wrongsecret")
+	if err == nil {
+		t.Fatalf("expected an error for wrong secret, got nil")
 	}
 }
