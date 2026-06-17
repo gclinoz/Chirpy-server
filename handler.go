@@ -24,6 +24,21 @@ type apiConfig struct {
 	platform		string
 }
 
+type User struct {
+	ID			uuid.UUID	`json:"id"`
+	CreatedAt	time.Time	`json:"created_at"`
+	UpdatedAt	time.Time	`json:"updated_at"`
+	Email		string		`json:"email"`
+}
+
+type Chirp struct {
+	ID        uuid.UUID	`json:"id"`
+	CreatedAt time.Time	`json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string	`json:"body"`
+	UserID    uuid.UUID	`json:"user_id"`
+}
+
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cfg.fileserverHits.Add(1)
@@ -79,13 +94,7 @@ func (cfg *apiConfig) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type Userm struct {
-		ID			uuid.UUID	`json:"id"`
-		CreatedAt	time.Time	`json:"created_at"`
-		UpdatedAt	time.Time	`json:"updated_at"`
-		Email		string		`json:"email"`
-	}
-	resp := Userm{
+	resp := User{
 		ID:			data.ID,
 		CreatedAt:	data.CreatedAt,
 		UpdatedAt:	data.UpdatedAt,
@@ -117,14 +126,7 @@ func (cfg *apiConfig) handleCreateChirp(w http.ResponseWriter, r *http.Request) 
 		respondWithError(w, 500, "Error when creating chirps")
 	}
 
-	type Chirpm struct {
-		ID        uuid.UUID	`json:"id"`
-		CreatedAt time.Time	`json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
-		Body      string	`json:"body"`
-		UserID    uuid.UUID	`json:"user_id"`
-	}
-	resp := Chirpm{
+	resp := Chirp{
 		ID:			data.ID,
 		CreatedAt:	data.CreatedAt,
 		UpdatedAt:	data.UpdatedAt,
@@ -134,6 +136,25 @@ func (cfg *apiConfig) handleCreateChirp(w http.ResponseWriter, r *http.Request) 
 	respondWithJSON(w, 201, resp)
 }
 
+func (cfg *apiConfig) handleGetChirp(w http.ResponseWriter, r *http.Request) {
+	data, err := cfg.db.GetAllChirp(r.Context())
+	if err != nil {
+		respondWithError(w, 500, "Error when getting chirps")
+	}
+	
+	resp := []Chirp{}
+	for _, val := range data {
+		resp = append(resp, Chirp{
+				ID:			val.ID,
+				CreatedAt:	val.CreatedAt,
+				UpdatedAt:	val.UpdatedAt,
+				Body:		val.Body,
+				UserID:		val.UserID,
+			},
+		)
+	}
+	respondWithJSON(w, 200, resp)
+}
 // func handleValid(w http.ResponseWriter, r *http.Request) {
 // 	type parameters struct {
 // 		Body string `json:"body"`
