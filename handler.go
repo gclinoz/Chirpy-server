@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gclinoz/Chirpy-server/internal/database"
+	"github.com/gclinoz/Chirpy-server/internal/auth"
 )
 
 func handleHealth(w http.ResponseWriter, req *http.Request) {
@@ -75,6 +76,7 @@ func (cfg *apiConfig) handleReset(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
+		Password string `json:"password"`
 		Email string `json:"email"`
 	}
 
@@ -87,7 +89,17 @@ func (cfg *apiConfig) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := cfg.db.CreateUser(r.Context(), params.Email)
+	hashed, err := auth.HashPassword(params.Password)
+	if err != nil {
+		log.Printf("Error hashing password: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	paramUser := database.CreateUserParams{
+		Email:			params.Email,
+		HashedPassword:	hashed,
+	}
+	data, err := cfg.db.CreateUser(r.Context(), paramUser)
 	if err != nil {
 		log.Printf("Error when creating new user: %s", err)
 		w.WriteHeader(500)
@@ -101,6 +113,42 @@ func (cfg *apiConfig) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		Email:		data.Email,
 	}
 	respondWithJSON(w, 201, resp)
+}
+
+func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Password string `json:"password"`
+		Email string `json:"email"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		log.Printf("Error decoding parameters: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	user, err := cfg.db.GetUser(r.Context(), params.Email)
+	if err != nil {
+		respondWithError(w, 401, "Incorrect email or password")
+		return
+	}
+
+	match, err := auth.CheckPasswordHash(params.Password, user.HashedPassword)
+	if err != nil || !match {
+		respondWithError(w, 401, "Incorrect email or password")
+		return
+	}
+
+	resp := User{
+		ID:			user.ID,
+		CreatedAt:	user.CreatedAt,
+		UpdatedAt:	user.UpdatedAt,
+		Email:		user.Email,
+	}
+	respondWithJSON(w, 200, resp)
 }
 
 func (cfg *apiConfig) handleCreateChirp(w http.ResponseWriter, r *http.Request) {
