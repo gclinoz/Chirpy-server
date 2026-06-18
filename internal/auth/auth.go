@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"fmt"
 	"strings"
+	"crypto/rand"
+	"encoding/hex"
 
 	"github.com/google/uuid"
 	"github.com/alexedwards/argon2id"
@@ -79,4 +81,10 @@ func GetBearerToken(headers http.Header) (string, error) {
 
 	ts := strings.TrimSpace(strings.TrimPrefix(bear, "Bearer"))
 	return ts, nil
+}
+
+func MakeRefreshToken() string {
+	key := make([]byte, 32)
+	rand.Read(key)
+	return hex.EncodeToString(key)
 }

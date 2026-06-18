@@ -32,6 +32,7 @@ type User struct {
 	UpdatedAt	time.Time	`json:"updated_at"`
 	Email		string		`json:"email"`
 	Token		string		`json:"token"`
+	RefToken	string		`json:"refresh_token"`
 }
 
 type Chirp struct {
@@ -121,7 +122,6 @@ func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Password			string	`json:"password"`
 		Email				string	`json:"email"`
-		ExpiresInSeconds	int		`json:"expires_in_seconds"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -144,14 +144,20 @@ func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exTime := time.Hour
-	if params.ExpiresInSeconds > 0 && params.ExpiresInSeconds < 3600 {
-		exTime = time.Duration(params.ExpiresInSeconds) * time.Second
-	}
-
-	ts, err := auth.MakeJWT(user.ID, cfg.key, exTime)
+	ts, err := auth.MakeJWT(user.ID, cfg.key, time.Hour)
 	if err != nil {
 		respondWithError(w, 500, "Error when generating token")
+		return
+	}
+
+	refParams := database.CreateRefTkParams{
+		Token:	auth.MakeRefreshToken(),
+		UserID:	user.ID,
+	}
+	reftk, err := cfg.db.CreateRefTk(r.Context(), refParams)
+	if err != nil {
+		respondWithError(w, 500, "Error when generating refresh token")
+		return
 	}
 
 	resp := User{
@@ -160,8 +166,58 @@ func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:	user.UpdatedAt,
 		Email:		user.Email,
 		Token:		ts,
+		RefToken:	reftk.Token,
 	}
 	respondWithJSON(w, 200, resp)
+}
+
+func (cfg *apiConfig) handleRefresh(w http.ResponseWriter, r *http.Request) {
+	reftk, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "Unauthorized, no valid refresh token found")
+		return
+	}
+
+	refData, err := cfg.db.GetUserFromRefreshToken(r.Context(), reftk)
+	if err != nil {
+		respondWithError(w, 401, "Unauthorized, error getting refresh token info")
+		return
+	}
+	if time.Now().After(refData.ExpiresAt) || refData.RevokedAt.Valid == true {
+		respondWithError(w, 401, "Unauthorized, token expired or revoked")
+		return
+	}
+
+	ts, err := auth.MakeJWT(refData.UserID, cfg.key, time.Hour)
+	if err != nil {
+		respondWithError(w, 500, "Error when generating token")
+		return
+	}
+
+	type parameters struct {
+		Token string `json:"token"`
+	}
+	resp := parameters{Token: ts}
+	respondWithJSON(w, 200, resp)
+}
+
+func (cfg *apiConfig) handleRevoke(w http.ResponseWriter, r *http.Request) {
+	reftk, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "Unauthorized, no valid refresh token found")
+		return
+	}
+
+	upParams := database.UpdateRevokeAtParams{
+		Token:		reftk,
+		UpdatedAt:	time.Now(),
+	}
+	err = cfg.db.UpdateRevokeAt(r.Context(), upParams)
+	if err != nil {
+		respondWithError(w, 500, "Error when updating refresh token")
+		return
+	}
+	w.WriteHeader(204)
 }
 
 func (cfg *apiConfig) handleCreateChirp(w http.ResponseWriter, r *http.Request) {
@@ -252,31 +308,6 @@ func (cfg *apiConfig) handleGetChirp(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, 200, resp)
 }
 
-// func handleValid(w http.ResponseWriter, r *http.Request) {
-// 	type parameters struct {
-// 		Body string `json:"body"`
-// 	}
-// 	decoder := json.NewDecoder(r.Body)
-// 	params := parameters{}
-// 	err := decoder.Decode(&params)
-// 	if err != nil {
-// 		log.Printf("Error decoding parameters: %s", err)
-// 		w.WriteHeader(500)
-// 		return
-// 	}
-// 	if len(params.Body) > 140 {
-// 		respondWithError(w, 400, "Chirp is too long")
-// 		return
-// 	}
-// 	type validResponse struct {
-// 		Cleaned_body string `json:"cleaned_body"`
-// 	}
-// 	success := validResponse{
-// 		Cleaned_body: replaceBad(params.Body),
-// 	}
-// 	respondWithJSON(w, 200, success)
-// }
-
 func respondWithError(w http.ResponseWriter, code int, msg string) {
 	type returnVals struct {
 		Error string `json:"error"`
@@ -310,18 +341,3 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.WriteHeader(code)
 	w.Write(dat)
 }
-
-// func replaceBad(words string) string {
-// 	splited := strings.Split(words, " ")
-// 	replaced := []string{}
-// 	for _, val := range splited {
-// 		if strings.ToLower(val) == "kerfuffle" ||
-// 		strings.ToLower(val) == "sharbert" ||
-// 		strings.ToLower(val) == "fornax" {
-// 			replaced = append(replaced, "****")
-// 			continue
-// 		}
-// 		replaced = append(replaced, val)
-// 	}
-// 	return strings.Join(replaced, " ")
-// }
