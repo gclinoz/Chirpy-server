@@ -23,6 +23,7 @@ type apiConfig struct {
 	fileserverHits	atomic.Int32
 	db				*database.Queries
 	platform		string
+	key				string
 }
 
 type User struct {
@@ -30,6 +31,7 @@ type User struct {
 	CreatedAt	time.Time	`json:"created_at"`
 	UpdatedAt	time.Time	`json:"updated_at"`
 	Email		string		`json:"email"`
+	Token		string		`json:"token"`
 }
 
 type Chirp struct {
@@ -117,8 +119,9 @@ func (cfg *apiConfig) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Password string `json:"password"`
-		Email string `json:"email"`
+		Password			string	`json:"password"`
+		Email				string	`json:"email"`
+		ExpiresInSeconds	int		`json:"expires_in_seconds"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -135,11 +138,20 @@ func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, 401, "Incorrect email or password")
 		return
 	}
-
 	match, err := auth.CheckPasswordHash(params.Password, user.HashedPassword)
 	if err != nil || !match {
 		respondWithError(w, 401, "Incorrect email or password")
 		return
+	}
+
+	exTime := time.Hour
+	if params.ExpiresInSeconds > 0 && params.ExpiresInSeconds < 3600 {
+		exTime = time.Duration(params.ExpiresInSeconds) * time.Second
+	}
+
+	ts, err := auth.MakeJWT(user.ID, cfg.key, exTime)
+	if err != nil {
+		respondWithError(w, 500, "Error when generating token")
 	}
 
 	resp := User{
@@ -147,31 +159,43 @@ func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:	user.CreatedAt,
 		UpdatedAt:	user.UpdatedAt,
 		Email:		user.Email,
+		Token:		ts,
 	}
 	respondWithJSON(w, 200, resp)
 }
 
 func (cfg *apiConfig) handleCreateChirp(w http.ResponseWriter, r *http.Request) {
-	type parameters struct {
-		Body	string		`json:"body"`
-		User_id	uuid.UUID	`json:"user_id"`
+	ts, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "Unauthorized, invalid token")
+		return
 	}
 
+	uid, err := auth.ValidateJWT(ts, cfg.key)
+	if err != nil {
+		respondWithError(w, 401, "Unauthorized, invalid token")
+		return
+	}
+
+	type parameters struct {
+		Body	string		`json:"body"`
+	}
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
-	err := decoder.Decode(&params)
+	err = decoder.Decode(&params)
 	if err != nil {
-		respondWithError(w, 500, "Invalid chirp")
+		respondWithError(w, 500, "Error when decoding request")
 		return
 	}
 
 	paramChirp := database.CreateChirpParams{
 		Body:	params.Body,
-		UserID:	params.User_id,
+		UserID:	uid,
 	}
 	data, err := cfg.db.CreateChirp(r.Context(), paramChirp)
 	if err != nil {
 		respondWithError(w, 500, "Error when creating chirps")
+		return
 	}
 
 	resp := Chirp{
@@ -188,6 +212,7 @@ func (cfg *apiConfig) handleGetAllChirp(w http.ResponseWriter, r *http.Request) 
 	data, err := cfg.db.GetAllChirp(r.Context())
 	if err != nil {
 		respondWithError(w, 500, "Error when getting chirps")
+		return
 	}
 	
 	resp := []Chirp{}
@@ -208,11 +233,13 @@ func (cfg *apiConfig) handleGetChirp(w http.ResponseWriter, r *http.Request) {
 	parsed, err := uuid.Parse(r.PathValue("chirpID"))
 	if err != nil {
 		respondWithError(w, 500, "Invalid chirpID")
+		return
 	}
 
 	data, err := cfg.db.GetChirp(r.Context(), parsed)
 	if err != nil {
 		respondWithError(w, 404, "Error when getting the chirp")
+		return
 	}
 
 	resp := Chirp{

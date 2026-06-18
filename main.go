@@ -24,6 +24,7 @@ func main() {
 	api := &apiConfig{
 		db:			database.New(db),
 		platform:	os.Getenv("PLATFORM"),
+		key:		os.Getenv("APIKEY"),
 	}
 
 	fileServer := http.FileServer(http.Dir("."))
