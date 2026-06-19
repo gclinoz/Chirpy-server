@@ -118,6 +118,57 @@ func (cfg *apiConfig) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, 201, resp)
 }
 
+func (cfg *apiConfig) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
+	ts, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "Unauthorized, error when getting token")
+		return
+	}
+
+	uid, err := auth.ValidateJWT(ts, cfg.key)
+	if err != nil {
+		respondWithError(w, 401, "Unauthorized, invalid token")
+		return
+	}
+
+	type parameters struct {
+		Password			string	`json:"password"`
+		Email				string	`json:"email"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err = decoder.Decode(&params)
+	if err != nil {
+		log.Printf("Error decoding parameters: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	hashed, err := auth.HashPassword(params.Password)
+	if err != nil {
+		respondWithError(w, 500, "Error when hashing password")
+		return
+	}
+
+	updateParam := database.UpdateUserParams{
+		ID:				uid,
+		Email:			params.Email,
+		HashedPassword:	hashed,
+	}
+	err = cfg.db.UpdateUser(r.Context(), updateParam)
+	if err != nil {
+		respondWithError(w, 500, "Error when updating user info")
+		return
+	}
+
+	resp := User{
+		ID:			uid,
+		Email:		params.Email,
+	}
+	respondWithJSON(w, 200, resp)
+}
+
 func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Password			string	`json:"password"`
