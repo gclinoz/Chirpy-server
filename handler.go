@@ -359,6 +359,42 @@ func (cfg *apiConfig) handleGetChirp(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, 200, resp)
 }
 
+func (cfg *apiConfig) handleDelChirp(w http.ResponseWriter, r *http.Request) {
+	ts, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "Unauthorized, error when getting token")
+		return
+	}
+	uid, err := auth.ValidateJWT(ts, cfg.key)
+	if err != nil {
+		respondWithError(w, 401, "Unauthorized, invalid token")
+		return
+	}
+
+	parsed, err := uuid.Parse(r.PathValue("chirpID"))
+	if err != nil {
+		respondWithError(w, 500, "Invalid chirpID")
+		return
+	}
+	data, err := cfg.db.GetChirp(r.Context(), parsed)
+	if err != nil {
+		respondWithError(w, 404, "Error when getting the chirp")
+		return
+	}
+	
+	if uid != data.UserID {
+		respondWithError(w, 403, "You are not authorized to do this")
+		return
+	}
+
+	err = cfg.db.DeleteChirp(r.Context(), data.ID)
+	if err != nil {
+		respondWithError(w, 500, "Error when deleting chirp")
+		return
+	}
+	w.WriteHeader(204)
+}
+
 func respondWithError(w http.ResponseWriter, code int, msg string) {
 	type returnVals struct {
 		Error string `json:"error"`
