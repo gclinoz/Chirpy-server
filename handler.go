@@ -33,6 +33,7 @@ type User struct {
 	Email		string		`json:"email"`
 	Token		string		`json:"token"`
 	RefToken	string		`json:"refresh_token"`
+	IsRed		bool		`json:"is_chirpy_red"`
 }
 
 type Chirp struct {
@@ -114,6 +115,7 @@ func (cfg *apiConfig) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:	data.CreatedAt,
 		UpdatedAt:	data.UpdatedAt,
 		Email:		data.Email,
+		IsRed:		data.IsChirpyRed,
 	}
 	respondWithJSON(w, 201, resp)
 }
@@ -218,6 +220,7 @@ func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Email:		user.Email,
 		Token:		ts,
 		RefToken:	reftk.Token,
+		IsRed:		user.IsChirpyRed,
 	}
 	respondWithJSON(w, 200, resp)
 }
@@ -393,6 +396,42 @@ func (cfg *apiConfig) handleDelChirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(204)
+}
+
+func (cfg *apiConfig) handleWebHook(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Event	string	`json:"event"`
+		Data	struct	{
+			UserID	string	`json:"user_id"`
+		} `json:"data"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		respondWithError(w, 500, "Error when decoding request")
+		return
+	}
+
+	if params.Event != "user.upgraded" {
+		w.WriteHeader(204)
+		return
+	}
+
+	parsed, err := uuid.Parse(params.Data.UserID)
+	if err != nil {
+		respondWithError(w, 500, "Invalid user ID")
+		return
+	}
+	if params.Event == "user.upgraded" {
+		err = cfg.db.UpdateRed(r.Context(), parsed)
+		if err != nil {
+			respondWithError(w, 404, "Error when updating red")
+			return
+		}
+		w.WriteHeader(204)
+	}
 }
 
 func respondWithError(w http.ResponseWriter, code int, msg string) {

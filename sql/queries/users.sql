@@ -22,3 +22,8 @@ WHERE id = $1;
 
 -- name: DeleteAllUser :exec
 DELETE FROM users;
+
+-- name: UpdateRed :exec
+UPDATE users
+SET is_chirpy_red = true
+WHERE id = $1;
