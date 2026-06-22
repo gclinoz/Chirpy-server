@@ -320,12 +320,39 @@ func (cfg *apiConfig) handleCreateChirp(w http.ResponseWriter, r *http.Request) 
 }
 
 func (cfg *apiConfig) handleGetAllChirp(w http.ResponseWriter, r *http.Request) {
-	data, err := cfg.db.GetAllChirp(r.Context())
+	s := r.URL.Query().Get("author_id")
+	if s == "" {
+		data, err := cfg.db.GetAllChirp(r.Context())
+		if err != nil {
+			respondWithError(w, 500, "Error when getting chirps")
+			return
+		}
+
+		resp := []Chirp{}
+		for _, val := range data {
+			resp = append(resp, Chirp{
+					ID:			val.ID,
+					CreatedAt:	val.CreatedAt,
+					UpdatedAt:	val.UpdatedAt,
+					Body:		val.Body,
+					UserID:		val.UserID,
+				},
+			)
+		}
+		respondWithJSON(w, 200, resp)
+	}
+
+	parsed, err := uuid.Parse(s)
 	if err != nil {
-		respondWithError(w, 500, "Error when getting chirps")
+		respondWithError(w, 500, "Error when getting author ID")
 		return
 	}
-	
+	data, err := cfg.db.GetChirpUser(r.Context(), parsed)
+	if err != nil {
+		respondWithError(w, 500, "Error when getting author's chirpys")
+		return
+	}
+
 	resp := []Chirp{}
 	for _, val := range data {
 		resp = append(resp, Chirp{
