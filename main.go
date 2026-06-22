@@ -25,6 +25,7 @@ func main() {
 		db:			database.New(db),
 		platform:	os.Getenv("PLATFORM"),
 		key:		os.Getenv("APIKEY"),
+		hookey:		os.Getenv("POLKA_KEY"),
 	}
 
 	fileServer := http.FileServer(http.Dir("."))

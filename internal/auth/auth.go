@@ -88,3 +88,17 @@ func MakeRefreshToken() string {
 	rand.Read(key)
 	return hex.EncodeToString(key)
 }
+
+func GetAPIKey(headers http.Header) (string, error) {
+	hook := headers.Get("Authorization")
+	if hook == "" {
+		return "", fmt.Errorf("no Polka key found")
+	}
+
+	if strings.Split(hook, " ")[0] != "ApiKey" {
+		return "", fmt.Errorf("wrong header format")
+	}
+
+	key := strings.TrimSpace(strings.TrimPrefix(hook, "ApiKey"))
+	return key, nil
+}

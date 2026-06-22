@@ -24,6 +24,7 @@ type apiConfig struct {
 	db				*database.Queries
 	platform		string
 	key				string
+	hookey			string
 }
 
 type User struct {
@@ -399,6 +400,16 @@ func (cfg *apiConfig) handleDelChirp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handleWebHook(w http.ResponseWriter, r *http.Request) {
+	key, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "Unauthorized, error when getting API Key")
+		return
+	}
+	if key != cfg.hookey {
+		respondWithError(w, 401, "Unauthorized, invalid API Key")
+		return
+	}
+
 	type parameters struct {
 		Event	string	`json:"event"`
 		Data	struct	{
@@ -408,7 +419,7 @@ func (cfg *apiConfig) handleWebHook(w http.ResponseWriter, r *http.Request) {
 
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
-	err := decoder.Decode(&params)
+	err = decoder.Decode(&params)
 	if err != nil {
 		respondWithError(w, 500, "Error when decoding request")
 		return
