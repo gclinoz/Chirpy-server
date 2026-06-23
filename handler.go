@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"encoding/json"
 	"time"
+	"sort"
 
 	"github.com/google/uuid"
 	"github.com/gclinoz/Chirpy-server/internal/database"
@@ -339,7 +340,13 @@ func (cfg *apiConfig) handleGetAllChirp(w http.ResponseWriter, r *http.Request) 
 				},
 			)
 		}
+
+		o := r.URL.Query().Get("sort")
+		if o == "desc" {
+			sort.Slice(resp, func(i, j int) bool { return resp[i].CreatedAt.After(resp[j].CreatedAt) })
+		}
 		respondWithJSON(w, 200, resp)
+		return
 	}
 
 	parsed, err := uuid.Parse(s)
@@ -363,6 +370,11 @@ func (cfg *apiConfig) handleGetAllChirp(w http.ResponseWriter, r *http.Request) 
 				UserID:		val.UserID,
 			},
 		)
+	}
+
+	o := r.URL.Query().Get("sort")
+	if o == "desc" {
+		sort.Slice(resp, func(i, j int) bool { return resp[i].CreatedAt.After(resp[j].CreatedAt) })
 	}
 	respondWithJSON(w, 200, resp)
 }
